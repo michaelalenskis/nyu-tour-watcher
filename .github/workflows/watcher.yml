@@ -1,66 +1,49 @@
 name: NYU Tour Watcher
+# re-register schedule
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # every 5 minutes
-  workflow_dispatch:          # allow manual trigger from GitHub UI
-
-permissions:
-  contents: write             # needed to commit registered.done back
+    - cron: '*/5 * * * *'   # every 5 minutes (GitHub's minimum)
+  workflow_dispatch:          # allow manual runs
 
 jobs:
   watch:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
 
-      # Exit immediately (cheaply) if we already registered
-      - name: Check if already registered
-        id: check
+      - name: Skip if already registered
         run: |
           if [ -f registered.done ]; then
-            echo "Already registered — nothing to do."
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "Already registered. Exiting."
+            exit 0
           fi
 
-      - uses: actions/setup-node@v4
-        if: steps.check.outputs.skip == 'false'
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      # Cache Playwright's Chromium binary so installs are fast after the first run
-      - name: Cache Playwright browsers
-        if: steps.check.outputs.skip == 'false'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ hashFiles('package-lock.json') }}
-
-      - name: Install npm dependencies
-        if: steps.check.outputs.skip == 'false'
+      - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Chromium + system deps
-        if: steps.check.outputs.skip == 'false'
-        run: npx playwright install chromium --with-deps
+      - name: Install Playwright browsers (Chromium only)
+        run: npx playwright install --with-deps chromium
 
       - name: Run watcher
-        if: steps.check.outputs.skip == 'false'
         run: node watcher.js
 
-      # If watcher.js created registered.done this run, commit it so future
-      # runs see it and exit early without installing anything.
       - name: Commit registered.done if created
-        if: steps.check.outputs.skip == 'false'
         run: |
           if [ -f registered.done ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add registered.done
-            git commit -m "Registered for NYU April 9 tour"
+            git commit -m "chore: mark April 9 tour as registered"
             git push
           fi
