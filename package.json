@@ -1,0 +1,12 @@
+{
+  "name": "nyu-tour-watcher",
+  "version": "1.0.0",
+  "description": "Watches for April 9 NYU tour availability and auto-registers",
+  "main": "watcher.js",
+  "scripts": {
+    "start": "node watcher.js"
+  },
+  "dependencies": {
+    "playwright": "1.58.2"
+  }
+}

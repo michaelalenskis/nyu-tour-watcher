@@ -1,0 +1,66 @@
+name: NYU Tour Watcher
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # every 5 minutes
+  workflow_dispatch:          # allow manual trigger from GitHub UI
+
+permissions:
+  contents: write             # needed to commit registered.done back
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exit immediately (cheaply) if we already registered
+      - name: Check if already registered
+        id: check
+        run: |
+          if [ -f registered.done ]; then
+            echo "Already registered — nothing to do."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.skip == 'false'
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Cache Playwright's Chromium binary so installs are fast after the first run
+      - name: Cache Playwright browsers
+        if: steps.check.outputs.skip == 'false'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+
+      - name: Install npm dependencies
+        if: steps.check.outputs.skip == 'false'
+        run: npm ci
+
+      - name: Install Playwright Chromium + system deps
+        if: steps.check.outputs.skip == 'false'
+        run: npx playwright install chromium --with-deps
+
+      - name: Run watcher
+        if: steps.check.outputs.skip == 'false'
+        run: node watcher.js
+
+      # If watcher.js created registered.done this run, commit it so future
+      # runs see it and exit early without installing anything.
+      - name: Commit registered.done if created
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          if [ -f registered.done ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add registered.done
+            git commit -m "Registered for NYU April 9 tour"
+            git push
+          fi
